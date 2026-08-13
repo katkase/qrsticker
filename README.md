@@ -1,20 +1,29 @@
-# qrsticker.py — QR code su cover per adesivi
+# qrsticker
 
-Colloca un QR code su una copertina quadrata, misurando da solo lo spazio
-libero per non finire sopra il soggetto. Pensato per stampare adesivi:
-sceglie la dimensione massima che sta sul fondo pulito e verifica che il
-codice risultante sia effettivamente leggibile.
+Place a QR code on square cover art without covering the artwork.
 
-Output: PNG alla risoluzione della cover originale, con il DPI corretto
-già scritto nei metadati.
+Built for printing stickers. The script measures how much clean background
+the cover actually has in a given corner, picks the largest code that fits,
+and verifies the result is decodable before you send anything to print.
 
----
+Output is a PNG at the source resolution with correct DPI written into the
+metadata.
 
-## Installazione su Windows
+## Why
 
-Serve Python 3.9 o superiore. Testato su 3.10.
+A QR code that looks fine on screen can be unreadable on a 3 cm sticker.
+What matters is the *module* — the elementary square of the code — not the
+overall size. Long URLs and high error correction both push the module
+smaller. Below roughly 0.5 mm, scanning starts failing on modest cameras
+and in poor light, which is exactly where street stickers live.
 
-Apri il terminale nella cartella dove hai messo `qrsticker.py`:
+This script makes that tradeoff explicit instead of leaving it to chance.
+
+## Installation
+
+Python 3.9 or later.
+
+### Windows
 
 ```
 py -m venv .venv
@@ -22,140 +31,140 @@ py -m venv .venv
 pip install qrcode pillow opencv-python-headless pyzbar
 ```
 
-Fatto. Su Windows le librerie C di zbar sono già dentro il pacchetto
-`pyzbar`, quindi non c'è nient'altro da installare a parte.
+The zbar C library ships inside the `pyzbar` wheel on Windows, so there is
+nothing else to install.
 
-### Se qualcosa non parte
+### Linux / macOS
 
-**`ImportError` su `libzbar-64.dll` o `libiconv.dll`**
-Manca il runtime Visual C++. Installa **Visual C++ Redistributable for
-Visual Studio 2013** — la versione conta, pyzbar è linkato a quella e non
-alle più recenti. In alternativa disinstalla pyzbar: lo script funziona
-lo stesso, la verifica gira con OpenCV soltanto.
-
-**PowerShell rifiuta di eseguire `activate`**
-Nella sessione corrente:
 ```
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+python3 -m venv .venv
+source .venv/bin/activate
+pip install qrcode pillow opencv-python-headless pyzbar
 ```
-Oppure usa `cmd` e lancia `.venv\Scripts\activate.bat`.
 
-**`python` apre il Microsoft Store**
-Usa `py` al posto di `python`. È il launcher ufficiale e ignora gli alias
-di Store.
+`pyzbar` is only a binding — the actual decoder is a system library:
 
-### Dipendenze
+```
+sudo apt install libzbar0        # Debian / Ubuntu
+brew install zbar                # macOS
+sudo emerge media-gfx/zbar       # Gentoo
+```
 
-| Pacchetto | Serve a |
+Without it, `import pyzbar` fails when loading the shared library. The
+error looks like a broken pip package but is not.
+
+### Dependencies
+
+| Package | Purpose |
 |---|---|
-| `qrcode` | generare la matrice del codice |
-| `pillow` | leggere e comporre le immagini |
-| `opencv-python-headless` | verifica di decodifica (opzionale) |
-| `pyzbar` | secondo decoder di verifica (opzionale) |
+| `qrcode` | generates the code matrix |
+| `pillow` | reads and composites images |
+| `opencv-python-headless` | decode verification (optional) |
+| `pyzbar` | second verification decoder (optional) |
 
-Senza i due opzionali lo script genera comunque i file: al posto del
-report di verifica stampa una riga che segnala che i decoder mancano.
-Usa la variante `headless` di OpenCV, non `opencv-python`: la seconda
-tira dentro tutto lo stack grafico Qt che qui non serve.
+Both optional packages can be skipped — the script still generates files
+and prints a note instead of the verification report. Use the `headless`
+OpenCV build; the regular one pulls in the whole Qt GUI stack for nothing.
 
----
-
-## Uso
-
-Comando minimo:
+## Usage
 
 ```
-py qrsticker.py cover.png --album "https://open.spotify.com/album/XXXX"
+python qrsticker.py cover.png --album "https://open.spotify.com/album/XXXX"
 ```
 
-Con due destinazioni diverse, utile per capire quale funziona meglio:
+Two destinations at once, useful for A/B testing which one performs:
 
 ```
-py qrsticker.py cover.png --album "https://open.spotify.com/album/XXXX" --track "https://open.spotify.com/track/YYYY"
+python qrsticker.py cover.png --album "https://open.spotify.com/album/XXXX" --track "https://open.spotify.com/track/YYYY"
 ```
 
-Metti sempre gli URL tra virgolette. In PowerShell la continuazione di
-riga è il backtick, in `cmd` è `^`: se hai dubbi scrivi tutto su una
-riga sola.
+Always quote URLs. In PowerShell the line continuation is a backtick, in
+`cmd` it is `^` — when in doubt keep it on one line.
 
-### Opzioni
+### Options
 
-| Opzione | Default | Cosa fa |
+| Option | Default | Description |
 |---|---|---|
-| `--album URL` | — | destinazione album |
-| `--track URL` | — | destinazione brano |
-| `--url URL` | — | destinazione generica, ripetibile |
-| `--sticker-cm` | `9.3` | lato dell'adesivo stampato, in cm |
-| `--position` | `both` | `tr` alto a destra, `bl` basso a sinistra, `both` |
-| `--field` | `off` | `off` moduli chiari sul fondo; `on` campo chiaro con moduli scuri |
-| `--size` | `auto` | footprint in cm, oppure `auto` |
-| `--max-size` | `2.8` | tetto per la ricerca automatica |
-| `--inset-mm` | `3.5` con campo, `2.0` senza | margine dai bordi |
-| `--ec` | `M` | correzione errore: `L` `M` `Q` `H` |
-| `--min-module` | `0.53` | modulo minimo accettato, in mm |
-| `--outdir` | `.` | cartella di destinazione |
-| `--prefix` | `qr` | prefisso dei nomi file |
+| `--album URL` | — | album destination |
+| `--track URL` | — | track destination |
+| `--url URL` | — | generic destination, repeatable |
+| `--sticker-cm` | `9.3` | printed sticker side, in cm |
+| `--position` | `both` | `tr` top right, `bl` bottom left, `both` |
+| `--field` | `off` | `off` light modules on the artwork; `on` light panel with dark modules |
+| `--size` | `auto` | footprint in cm, or `auto` |
+| `--max-size` | `2.8` | ceiling for the automatic search |
+| `--inset-mm` | `3.5` with panel, `2.0` without | margin from the edges |
+| `--ec` | `M` | error correction: `L` `M` `Q` `H` |
+| `--min-module` | `0.53` | smallest accepted module, in mm |
+| `--outdir` | `.` | output directory |
+| `--prefix` | `qr` | output filename prefix |
 
-### Le due varianti grafiche
+Colour constants (`WARM_WHITE`, `DARK_RED`) are at the top of the file.
 
-`--field off` (default) disegna i moduli in bianco caldo direttamente sul
-fondo della copertina, senza riquadro. Il margine di quiete è fondo
-pulito, non bianco. Il codice risulta invertito rispetto allo standard:
-iPhone e Android recenti lo leggono, alcune app di terze parti e Android
-datati no. **Provalo sul campo prima di stampare in quantità.**
+### The two visual modes
 
-`--field on` disegna un riquadro chiaro con i moduli in rosso scuro,
-margine 3,5 mm dai bordi, nello stile del codice a barre sugli albi a
-fumetti. Polarità standard, quindi lo legge chiunque. È la scelta
-prudente.
+**`--field off`** (default) draws the modules in warm white directly on the
+cover background, with no panel. The quiet zone is clean background rather
+than white. This produces an *inverted* code relative to the spec: recent
+iPhones and Android phones read it, some third-party apps and older Android
+devices do not. Test it in the field before printing a run.
 
----
+**`--field on`** draws a light panel with dark red modules, 3.5 mm from the
+edges, in the style of the barcode box on comic books. Standard polarity,
+so anything reads it. This is the safe option.
 
-## Come sceglie la dimensione
+## How sizing works
 
-In modalità `auto` parte da `--max-size` e scende di mezzo millimetro per
-volta finché il footprint non sta interamente su fondo pulito. Il bordo
-del soggetto viene misurato riga per riga dentro la fascia che il codice
-occuperebbe davvero, non su un ritaglio fisso, quindi si adatta alla posa.
+In `auto` mode the script starts at `--max-size` and steps down by 0.5 mm
+until the footprint sits entirely on clean background. The subject edge is
+measured row by row inside the band the code would actually occupy — not
+against a fixed crop — so it adapts to the composition.
 
-Se per stare nello spazio libero il modulo dovesse scendere sotto
-`--min-module`, lo script si ferma e te lo dice invece di produrre un file
-che non si leggerebbe. In quel caso: accorcia l'URL, cambia angolo, o
-passa a `--field on` (il riquadro può stare sopra il soggetto, quindi non
-ha il vincolo).
+If fitting the available space would push the module below `--min-module`,
+the script stops and says so rather than emitting a file that would not
+scan. When that happens: shorten the URL, try the other corner, or switch
+to `--field on`, which has no clearance constraint because the panel is
+allowed to sit on top of the subject.
 
-Il colore di fondo viene campionato dai quattro angoli, quindi funziona
-anche su copertine che non sono rosse.
+The background colour is sampled from the four corners, so the script is
+not tied to any particular artwork palette.
 
-## Verifica
+## Verification
 
-Ogni file prodotto viene riletto con due decoder a tre risoluzioni
-decrescenti, per simulare una foto imperfetta. Quando il codice è
-invertito viene invertito prima di leggerlo — altrimenti fallirebbe
-sempre per polarità e la verifica non direbbe nulla su geometria,
-contrasto e margini, che sono le cose che possono davvero rompersi.
+Every generated file is read back with two independent decoders at three
+decreasing resolutions, simulating an imperfect photo. Inverted codes are
+inverted before decoding — otherwise they would always fail on polarity
+and the check would tell you nothing about geometry, contrast and margins,
+which are the things that actually break.
 
-Sotto 0,6 mm di modulo compare un avviso. Non significa che non funzioni,
-significa che il margine si assottiglia con sporco, graffi e luce scarsa.
+A warning is printed below 0.6 mm module size. It does not mean the code
+fails; it means the margin thins out with dirt, scratches and low light.
 
-## Riferimenti utili
+## Rules of thumb
 
-Il modulo è il quadratino elementare del codice e determina tutto. Sotto
-0,5 mm i problemi iniziano su fotocamere modeste e luce artificiale.
-La distanza di lettura è circa dieci volte il lato del codice: 2 cm si
-legge da una ventina di centimetri, cioè chinandosi appena.
+Reading distance is roughly ten times the code's side: a 2 cm code scans
+from about 20 cm, which is the distance someone reaches by leaning in
+slightly. Below that people do not bother.
 
-Accorciare l'URL vale più che ingrandire l'adesivo. Su un link Spotify,
-togliere `?si=...` e `&utm_source=...` lo riduce di trenta caratteri e fa
-scendere il codice di una versione intera, a parità di ingombro.
+Shortening the URL buys more than enlarging the sticker. On a Spotify link,
+dropping `?si=...` and `&utm_source=...` removes about thirty characters and
+drops the code a full version, at identical physical size.
 
-## Limiti noti
+Embedding a logo forces error correction H, which inflates the matrix
+substantially. On small stickers the logo costs more legibility than it
+adds recognition.
 
-Il rilevamento del bordo confronta ogni pixel con il colore di fondo
-usando una tolleranza fissa. Su copertine con sfumature ampie, o con
-soggetto di colore vicino al fondo, può sbagliare la misura: in quei casi
-forza `--size` e controlla il risultato a occhio. Su fondi piatti è
-affidabile.
+## Known limitations
 
-Lo script assume una cover quadrata. Se non lo è, avvisa e procede
-calcolando tutto sulla larghezza.
+Edge detection compares each pixel against the sampled background colour
+with a fixed tolerance. On covers with broad gradients, or where the
+subject is close in colour to the background, the measurement can be wrong
+— force `--size` and check the result visually. On flat backgrounds it is
+reliable.
+
+The script assumes square cover art. If it is not, a warning is printed and
+all calculations are based on the width.
+
+## License
+
+MIT.
